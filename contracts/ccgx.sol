@@ -4,7 +4,7 @@ pragma solidity ^0.4.23;
 library SafeMath {
 
     //Multiplies two numbers, reverts on overflow with gas optimization
-    //by requiring 'a' not being zero but not also testing 'b'.
+    //by requiring 'a' not being zero and hence not testing 'b'.
     function mul(uint256 a, uint256 b) internal pure returns (uint256) {
         if (a == 0) {
             return 0;
@@ -40,14 +40,34 @@ library SafeMath {
         require(b != 0);
         return a % b;
     }
+
+    //Safe way to detect overflow in exponentiation.
+    function exp(int256 a, uint256 pow) internal pure returns (int256) {
+       assert(a >= 0);
+       int256 result = 0;
+       if (a == 0) {
+           require(pow > 0, "Exponentiating 0 to 0 is not defined.");
+           return result;
+        }
+       else {
+            result = 1;
+            for (uint256 i = 0; i < pow; i++) {
+                 result *= a;
+                 assert(result >= a);
+             }
+             return result;
+       }
+    }
 }
 
 contract CCGX {
     using SafeMath for uint256;
+    using SafeMath for uint8;
+    using SafeMath for int256;
 
     string public name;                             // Fully qualified nane of the token
     string public symbol;                           // Ticker of token on Exchanges
-    uint256 public totalSupply;                     // 6 decimals as 10^6 sun = 1 TRX
+    uint256 public totalSupply;                     // Includes 6 decimals as 10^6 sun = 1 TRX
     mapping (address => uint256) public balanceOf;  // This creates an array with all balances
 
     // key-value pair of custodian struct
@@ -66,14 +86,15 @@ contract CCGX {
     event BurnApproval(address indexed _owner, address indexed _arsonist, uint256 _value);
 
 
-    uint256 initialSupply = 42000000;
+    uint256 public initialSupply = 42000000;
     string tokenName = 'CryptoCannabisGame';
     string tokenSymbol = 'CCGX';
-    uint256 public decimals = 6;
+    uint8 public decimals = 6;
 
     //Constructor function initializes contract with initial supply tokens to the creator of the contract
     constructor() public {
-        totalSupply = initialSupply.mul(10).mul(uint256(decimals));             // Multiplies total supply with the decimal precision
+        // Multiplies total supply with the decimal precision through safe exponentiation
+        totalSupply = uint256((int256(initialSupply))).mul(uint256(int256(10).exp(decimals)));
         balanceOf[msg.sender] = totalSupply;                                    // Gives the contract creator all initial tokens
         name = tokenName;                                                       // Sets the name for display purposes
         symbol = tokenSymbol;                                                   // Sets the symbol for display purposes
