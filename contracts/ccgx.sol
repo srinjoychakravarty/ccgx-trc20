@@ -5,57 +5,67 @@ library SafeMath {
 
     //Multiplies two numbers, reverts on overflow with gas optimization
     //by requiring 'a' not being zero and hence not testing 'b'.
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256)
+    {
+        if (a == 0)
+        {
             return 0;
         }
         uint256 c = a * b;
         require(c / a == b);
         return c;
-  }
+    }
 
     //Integer division of two numbers truncating the quotient, reverts on division by zero.
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+    function div(uint256 a, uint256 b) internal pure returns (uint256)
+    {
         require(b > 0);
         uint256 c = a / b;
         return c;
     }
 
     //Subtracts two numbers, reverts on overflow (i.e. if subtrahend is greater than minuend).
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+    function sub(uint256 a, uint256 b) internal pure returns (uint256)
+    {
         require(b <= a);
         uint256 c = a - b;
         return c;
     }
 
     //Adds two numbers, reverts on overflow.
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+    function add(uint256 a, uint256 b) internal pure returns (uint256)
+    {
         uint256 c = a + b;
         require(c >= a);
         return c;
     }
 
     //Divides two numbers and returns the remainder (unsigned integer modulo), reverts when dividing by zero.
-    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+    function mod(uint256 a, uint256 b) internal pure returns (uint256)
+    {
         require(b != 0);
         return a % b;
     }
 
     //Safe way to detect overflow in exponentiation.
-    function exp(int256 a, uint256 pow) internal pure returns (int256) {
+    function exp(int256 a, uint256 pow) internal pure returns (int256)
+    {
        assert(a >= 0);
        int256 result = 0;
-       if (a == 0) {
-           require(pow > 0, "Exponentiating 0 to 0 is not defined.");
-           return result;
-        }
-       else {
-            result = 1;
-            for (uint256 i = 0; i < pow; i++) {
-                 result *= a;
-                 assert(result >= a);
-             }
-             return result;
+       if (a == 0)
+       {
+          require(pow > 0, "Exponentiating 0 to 0 is not defined.");
+          return result;
+       }
+       else
+       {
+          result = 1;
+          for (uint256 i = 0; i < pow; i++)
+          {
+             result *= a;
+             assert(result >= a);
+          }
+          return result;
        }
     }
 }
@@ -85,14 +95,14 @@ contract CCGX {
     event SpendApproval(address indexed _owner, address indexed _spender, uint256 _value);
     event BurnApproval(address indexed _owner, address indexed _arsonist, uint256 _value);
 
-
     uint256 public initialSupply = 42000000;
     string tokenName = 'CryptoCannabisGame';
     string tokenSymbol = 'CCGX';
     uint8 public decimals = 6;
 
     //Constructor function initializes contract with initial supply tokens to the creator of the contract
-    constructor() public {
+    constructor() public
+    {
         // Multiplies total supply with the decimal precision through safe exponentiation
         totalSupply = uint256((int256(initialSupply))).mul(uint256(int256(10).exp(decimals)));
         balanceOf[msg.sender] = totalSupply;                                    // Gives the contract creator all initial tokens
@@ -101,7 +111,8 @@ contract CCGX {
     }
 
     //Internal transfer, only can be called by this contract
-    function _transfer(address _from, address _to, uint256 _value) internal {
+    function _transfer(address _from, address _to, uint256 _value) internal
+    {
         require(_to != address(0x0));                                           // Prevents accidental transfer to 0x0 address.
         require(balanceOf[_from] >= _value);                                    // Ensures the sender does not transfer more than he has
         require(balanceOf[_to].add(_value) >= balanceOf[_to]);                  // Checks for overflows
@@ -113,13 +124,15 @@ contract CCGX {
     }
 
     //Transfers tokens of _value` amount `_to` the address of the recipient from caller's account
-    function transfer(address _to, uint256 _value) public returns (bool success) {
+    function transfer(address _to, uint256 _value) public returns (bool success)
+    {
         _transfer(msg.sender, _to, _value);
         return true;
     }
 
     //Destroy `_value` amount of tokens from the Tron blockchain irreversibly
-    function burn(uint256 _value) public returns (bool success) {
+    function burn(uint256 _value) public returns (bool success)
+    {
         require(balanceOf[msg.sender] >= _value);                               // Checks that the arsonist isn't burning more than they own
         balanceOf[msg.sender] = balanceOf[msg.sender].sub(_value);              // Subtracts from the sender first
         totalSupply = totalSupply.sub(_value);                                  // Subtracts from the totalSupply
@@ -128,23 +141,53 @@ contract CCGX {
     }
 
     //Sets allowance for the authorized '_spender' address to spend a maximum of `_value` tokens on your behalf
-    function approveSpend(address _spender, uint256 _value) public
-        returns (bool success) {
-        allowance[msg.sender][_spender].maxSpend = allowance[msg.sender][_spender].maxSpend.add(_value);
+    function approveSpend(address _spender, uint256 _value) public returns (bool success)
+    {
+        require(_spender != address(0));                                        //Address approved shouldn't be 0x0
+        require(_spender != msg.sender);                                        //Do not waste gas to approve self
+        require(balanceOf[msg.sender] >= _value);                               //address balance must be >= _value of custody being given to
+        allowance[msg.sender][_spender].maxSpend = _value;
         emit SpendApproval(msg.sender, _spender, _value);
         return true;
-    }
 
-    //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_value` tokens on your behalf
-    function approveBurn(address _arsonist, uint256 _value) public
-        returns (bool success) {
-        allowance[msg.sender][_arsonist].maxBurn = allowance[msg.sender][_arsonist].maxBurn.add(_value);
-        emit BurnApproval(msg.sender, _arsonist, _value);
+     }
+
+     //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
+     function approveBurn(address _arsonist, uint256 _burn) public returns (bool success)
+     {
+         require(_arsonist != address(0));                                        //Address approved shouldn't be 0x0
+         require(_arsonist != msg.sender);                                        //Do not waste gas to provide burn approval to self
+         require(balanceOf[msg.sender] >= _burn);                                //address balance must be >= amount of allowable _burn
+         allowance[msg.sender][_arsonist].maxBurn = _burn;
+         emit BurnApproval(msg.sender, _arsonist, _burn);
+         return true;
+     }
+
+      // Increments the amount of tokens alloted by owner to be spent on their behalf by addedValue.
+     function increaseSpendAllowance(address _spender, uint256 _addedValue) public returns (bool)
+     {
+        require(_spender != address(0));                                                                                      //Address approved shouldn't be 0x0
+        require(_spender != msg.sender);                                                                                      //Do not waste gas to approve self
+        require(balanceOf[msg.sender] >= allowance[msg.sender][_spender].maxSpend.add(_addedValue));                          //address balance must be >= total _value of custody given
+        allowance[msg.sender][_spender].maxSpend = allowance[msg.sender][_spender].maxSpend.add(_addedValue);
+        emit SpendApproval(msg.sender, _spender, allowance[msg.sender][_spender].maxSpend);
         return true;
-    }
+     }
+
+     // Increments the amount of tokens alloted by owner to be burned on their behalf by addedBurn.
+     function increaseBurnAllowance(address _arsonist, uint256 _addedBurn) public returns (bool success)
+     {
+         require(_arsonist != address(0));                                                                                         //Address approved shouldn't be 0x0
+         require(_arsonist != msg.sender);                                                                                         //Do not waste gas to provide burn approval to self
+         require(balanceOf[msg.sender] >= allowance[msg.sender][_arsonist].maxBurn.add(_addedBurn));                               //address balance must be >= total allowable burn
+         allowance[msg.sender][_arsonist].maxBurn = allowance[msg.sender][_arsonist].maxBurn.add(_addedBurn);
+         emit BurnApproval(msg.sender, _arsonist, allowance[msg.sender][_arsonist].maxBurn);
+         return true;
+     }
 
    //Transfers tokens on on behalf of designated `_from` address of `_value` amount `_to` a chosen recipient address
-   function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
+   function transferFrom(address _from, address _to, uint256 _value) public returns (bool success)
+   {
        require(_value <= allowance[_from][msg.sender].maxSpend);                                    // Ensures amount being transferred is in line with approved allowance
        allowance[_from][msg.sender].maxSpend = allowance[_from][msg.sender].maxSpend.sub(_value);   // Decrements spend allowance by the amount already transferred out
        _transfer(_from, _to, _value);                                                               // Triggers transfer
@@ -152,7 +195,8 @@ contract CCGX {
    }
 
    //Destroy `_value` amount of tokens from the other account and the Tron blockchain irreversibly with the blessings of `_from`.
-   function burnFrom(address _from, uint256 _value) public returns (bool success) {
+   function burnFrom(address _from, uint256 _value) public returns (bool success)
+   {
        require(balanceOf[_from] >= _value);                                                       // Ensures amount being burned is lesser than or equal to current balance
        require(_value <= allowance[_from][msg.sender].maxBurn);                                   // Ensures amount being destroyed is in line with burn allowance
        balanceOf[_from] = balanceOf[_from].sub(_value);                                           // Subtract from the targeted balance
