@@ -89,6 +89,20 @@ contract CCGX {
     //maps max send and burn allowances for each approved custodian
     mapping (address => mapping (address => Custodian)) public allowance;
 
+    //Key set of all CCGX benefactor addresses maintained in an auxiliary array
+    address[] public benefactorKeys;
+
+    //Struct that tracks amounts controlled by beneficiary for a given benefactor address
+    struct Beneficiary {
+      address inheritor
+      uint256 endowmentSpend;
+      uint256 endowmentBurn;
+    }
+
+    //Each key in benefactorKeys array unlocks an array value of beneficiaries, each of whom have the attributed of a Beneficiary object
+    Beneficiary[] beneficiaries;
+    //beneficiaries.push(Beneficiary(msg.sender, 24, 5))
+
     // The following generate transfer, approval and burn events respectively on the tron blockchain that notify clients
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Burn(address indexed from, uint256 value);
