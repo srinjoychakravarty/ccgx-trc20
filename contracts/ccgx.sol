@@ -75,10 +75,14 @@ contract CCGX {
     using SafeMath for uint8;
     using SafeMath for int256;
 
-    string public name;                             // Fully qualified nane of the token
-    string public symbol;                           // Ticker of token on Exchanges
-    uint256 public totalSupply;                     // Includes 6 decimals as 10^6 sun = 1 TRX
-    mapping (address => uint256) public balanceOf;  // This creates an array with all balances
+    bytes public senderAddressBytes;                                            // Bytes variable to test address to bytes32 conversion
+    address public test_address1;                                               // Address variable to test bytes to address conversion
+
+
+    string public name;                                                         // Fully qualified nane of the token
+    string public symbol;                                                       // Ticker of token on Exchanges
+    uint256 private totalSupply;                                                // Includes 6 decimals as 10^6 sun = 1 TRX
+    mapping (address => uint256) public balanceOf;                              // This creates an array with all balances
 
     // key-value pair of custodian struct
     struct Custodian {
@@ -89,19 +93,19 @@ contract CCGX {
     //maps max send and burn allowances for each approved custodian
     mapping (address => mapping (address => Custodian)) public allowance;
 
-    //Key set of all CCGX benefactor addresses maintained in an auxiliary array
-    address[] public benefactorKeys;
-
     //Struct that tracks amounts controlled by beneficiary for a given benefactor address
-    struct Beneficiary {
-      address inheritor
-      uint256 endowmentSpend;
-      uint256 endowmentBurn;
+    struct Pip {
+      bool exists;
+      address inheritor;
+      uint256 inheritedSpend;
+      uint256 inheritedBurn;
     }
 
-    //Each key in benefactorKeys array unlocks an array value of beneficiaries, each of whom have the attributed of a Beneficiary object
-    Beneficiary[] beneficiaries;
-    //beneficiaries.push(Beneficiary(msg.sender, 24, 5))
+    //Each benefactor address like miss havisham's corresponds to an array of beneficiaries each consisting of a lucky boy like Pip
+    mapping (address => Pip[]) missHavisham;
+
+    //Each benefactor address is also maintained in an auxiliary benefactorKeys array for cheap gas accounting
+    address[] public benefactorKeys;
 
     // The following generate transfer, approval and burn events respectively on the tron blockchain that notify clients
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -154,17 +158,69 @@ contract CCGX {
         return true;
     }
 
-    //Sets allowance for the authorized '_spender' address to spend a maximum of `_value` tokens on your behalf
-    function approveSpend(address _spender, uint256 _value) public returns (bool success)
+    //Sets allowance for the authorized '_spender' address to spend a maximum of `_spend` tokens on your behalf
+    function approveSpend(address _spender, uint256 _spend) public returns (bool success)
     {
         require(_spender != address(0));                                        //Address approved shouldn't be 0x0
         require(_spender != msg.sender);                                        //Do not waste gas to approve self
-        require(balanceOf[msg.sender] >= _value);                               //address balance must be >= _value of custody being given to
-        allowance[msg.sender][_spender].maxSpend = _value;
-        emit SpendApproval(msg.sender, _spender, _value);
+        require(balanceOf[msg.sender] >= _spend);                               //Address balance must be >= _spend of custody being given to
+        allowance[msg.sender][_spender].maxSpend = _spend;                      //Precisely sets 'maxSpend' to '_spend' amount which may even lower the limit
+        Pip memory beneficiary = Pip(true, _spender, _spend, 0);                //benefactor ('missHavisham') approves a beneficiary ('Pip')
+        missHavisham[msg.sender].push(beneficiary );                            //benefactor ('missHavisham') appends to her beneficiary list
+        benefactorKeys.push(msg.sender);                                        //user calling approveSpend has address added to benefactorKeys array
+        emit SpendApproval(msg.sender, _spender, _spend);
         return true;
-
      }
+
+    // function getusers (address _benefactor) public view returns (address)
+    // {
+    //    uint i;
+    //    uint array_len = missHavisham[_benefactor].length;
+    //    for(i = 0; i < array_len; i++)
+    //    {
+    //      return missHavisham[_benefactor][i].inheritor;
+    //    }
+    // }
+
+   //  function getApprovedSpenders (address _benefactor) public view returns (bytes32[] gentlemen)
+   //  {
+   //    uint i;
+   //    uint array_len = missHavisham[_benefactor].length;                          //checks number of approved benefactors for a given address
+   //    gentlemen = new bytes32[](array_len);                                       //creates fixed length array 'gentlemen' to fit number of benefactors
+   //    for(i = 0; i < array_len; i++)
+   //    {
+   //      gentlemen[i] = stringToBytes32(missHavisham[_benefactor][i].inheritor); //for loop inserts each benefactor address into 'gentlemen' array
+   //    }
+   // }
+
+   function addressToBytes(address a) public pure returns (bytes memory b)             //efficiently converts tron address into printable 20 byte variable
+   {
+       assembly {
+           let m := mload(0x40)
+           a := and(a, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+           mstore(add(m, 20), xor(0x140000000000000000000000000000000000000000, a))
+           mstore(0x40, add(m, 52))
+           b := m
+      }
+   }
+
+    function bytesToAddress(bytes b) public pure returns (address)                 //converts input bytes into address
+    {
+        uint result = 0;
+        for (uint i = b.length-1; i+1 > 0; i--)
+        {
+            uint c = uint(b[i]);
+            uint to_inc = c * ( 16 ** ((b.length - i-1) * 2));
+            result += to_inc;
+        }
+        return address(result);
+    }
+
+    function test1() public
+    {
+       senderAddressBytes = addressToBytes(msg.sender);
+       test_address1 = bytesToAddress(senderAddressBytes);
+    }
 
      //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
      function approveBurn(address _arsonist, uint256 _burn) public returns (bool success)
