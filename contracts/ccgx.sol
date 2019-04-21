@@ -1,4 +1,5 @@
 pragma solidity ^0.4.23;
+//pragma experimental ABIEncoderV2;
 
 // SafeMath operations with safety checks that revert on error
 library SafeMath {
@@ -74,10 +75,6 @@ contract CCGX {
     using SafeMath for uint256;
     using SafeMath for uint8;
     using SafeMath for int256;
-
-    bytes public senderAddressBytes;                                            // Bytes variable to test address to bytes32 conversion
-    address public test_address1;                                               // Address variable to test bytes to address conversion
-
 
     string public name;                                                         // Fully qualified nane of the token
     string public symbol;                                                       // Ticker of token on Exchanges
@@ -172,27 +169,6 @@ contract CCGX {
         return true;
      }
 
-    // function getusers (address _benefactor) public view returns (address)
-    // {
-    //    uint i;
-    //    uint array_len = missHavisham[_benefactor].length;
-    //    for(i = 0; i < array_len; i++)
-    //    {
-    //      return missHavisham[_benefactor][i].inheritor;
-    //    }
-    // }
-
-   //  function getApprovedSpenders (address _benefactor) public view returns (bytes32[] gentlemen)
-   //  {
-   //    uint i;
-   //    uint array_len = missHavisham[_benefactor].length;                          //checks number of approved benefactors for a given address
-   //    gentlemen = new bytes32[](array_len);                                       //creates fixed length array 'gentlemen' to fit number of benefactors
-   //    for(i = 0; i < array_len; i++)
-   //    {
-   //      gentlemen[i] = stringToBytes32(missHavisham[_benefactor][i].inheritor); //for loop inserts each benefactor address into 'gentlemen' array
-   //    }
-   // }
-
    function addressToBytes(address a) public pure returns (bytes memory b)             //efficiently converts tron address into printable 20 byte variable
    {
        assembly {
@@ -204,7 +180,7 @@ contract CCGX {
       }
    }
 
-    function bytesToAddress(bytes b) public pure returns (address)                 //converts input bytes into address
+    function bytesToAddress(bytes memory b) public pure returns (address)                 //converts input bytes into address
     {
         uint result = 0;
         for (uint i = b.length-1; i+1 > 0; i--)
@@ -216,11 +192,18 @@ contract CCGX {
         return address(result);
     }
 
-    function test1() public
-    {
-       senderAddressBytes = addressToBytes(msg.sender);
-       test_address1 = bytesToAddress(senderAddressBytes);
-    }
+    // Return array of bytes32 as solidity doesn't support returning string arrays yet
+   function getApprovedSpenders (address _benefactor) public view returns (bytes memory)
+   {
+     uint i;
+     uint array_len = missHavisham[_benefactor].length;                         //checks number of approved benefactors for a given address
+     bytes[] memory gentlemen = new bytes[](array_len);                         //creates fixed length array 'gentlemen' to fit number of benefactors
+     for(i = 0; i < array_len; i++)
+     {
+       gentlemen[i] = addressToBytes(missHavisham[_benefactor][i].inheritor);   //for loop inserts each benefactor address as bytes into 'gentlemen' array
+     }
+     return gentlemen[0];
+  }
 
      //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
      function approveBurn(address _arsonist, uint256 _burn) public returns (bool success)
