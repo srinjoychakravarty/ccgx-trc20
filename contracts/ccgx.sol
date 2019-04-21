@@ -192,38 +192,31 @@ contract CCGX {
         return address(result);
     }
 
-    // Return array of bytes32 as solidity doesn't support returning string arrays yet
-   function getApprovedSpenders (address _benefactor) public view returns (address[])
-   {
-     uint i;
-     uint array_len = missHavisham[_benefactor].length;                                         //checks number of approved benefactors for a given address
-     address[] memory spenders = new address[](array_len);                                      //creates fixed length array 'spenders' to fit number of beneficiaries
-     for(i = 0; i < array_len; i++)
-     {
-       spenders[i] = bytesToAddress(addressToBytes(missHavisham[_benefactor][i].inheritor));    //for loop inserts each benefciary address as address into 'spenders' array
-     }
-     return spenders;
-   }
+    function getApprovedSpenders (address _benefactor) public view returns (address)
+    {
+      uint i;
+      uint array_len = missHavisham[_benefactor].length;                         //checks number of approved benefactors for a given address
+      bytes[] memory gentlemen = new bytes[](array_len);                         //creates fixed length array 'gentlemen' to fit number of benefactors
+      for(i = 0; i < array_len; i++)
+      {
+        gentlemen[i] = addressToBytes(missHavisham[_benefactor][i].inheritor);   //for loop inserts each benefactor address as bytes into 'gentlemen' array
+      }
+      bytes memory addrInBytes = gentlemen[1];
+      address addrInAddr = bytesToAddress(addrInBytes);
+      return addrInAddr;
+    }
 
-    // function retrieveSpenders (address _benefactor) public view returns (address)
-    // {
-    //
-    // }
-    //
-    // function retrieveArsonists (address _benefactor) public view returns (address)
-    // {
-    //
-    // }
-    //
-    // function getTotalDelegatedSpend (address _benefactor) public view returns (address)
-    // {
-    //
-    // }
-    //
-    // function getTotalDelegatedBurn (address _benefactor) public view returns (address)
-    // {
-    //
-    // }
+    function getTotalReqlinquished (address _benefactor) public view returns (uint256)
+    {
+      uint i;
+      uint256 count;
+      uint256 array_len = missHavisham[_benefactor].length;
+      for(i = 0; i < array_len; i++)
+      {
+        count = count + (missHavisham[_benefactor][i].inheritedSpend);
+      }
+      return count;
+   }
 
      //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
      function approveBurn(address _arsonist, uint256 _burn) public returns (bool success)
