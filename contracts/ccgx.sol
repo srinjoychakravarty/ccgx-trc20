@@ -169,7 +169,7 @@ contract CCGX {
         return true;
      }
 
-   function addressToBytes(address a) public pure returns (bytes memory b)             //efficiently converts tron address into printable 20 byte variable
+   function addressToBytes(address a) internal pure returns (bytes memory b)             //efficiently converts tron address into printable 20 byte variable
    {
        assembly {
            let m := mload(0x40)
@@ -180,7 +180,7 @@ contract CCGX {
       }
    }
 
-    function bytesToAddress(bytes memory b) public pure returns (address)                 //converts input bytes into address
+    function bytesToAddress(bytes memory b) internal pure returns (address)                 //converts input bytes into address
     {
         uint result = 0;
         for (uint i = b.length-1; i+1 > 0; i--)
@@ -193,7 +193,7 @@ contract CCGX {
     }
 
     // Return array of bytes32 as solidity doesn't support returning string arrays yet
-   function getApprovedSpenders (address _benefactor) public view returns (bytes memory)
+   function getApprovedSpenders (address _benefactor) public view returns (address)
    {
      uint i;
      uint array_len = missHavisham[_benefactor].length;                         //checks number of approved benefactors for a given address
@@ -202,7 +202,9 @@ contract CCGX {
      {
        gentlemen[i] = addressToBytes(missHavisham[_benefactor][i].inheritor);   //for loop inserts each benefactor address as bytes into 'gentlemen' array
      }
-     return gentlemen[0];
+     bytes memory addrInBytes = gentlemen[0];
+     address addrInAddr = bytesToAddress(addrInBytes);
+     return addrInAddr;
   }
 
      //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
