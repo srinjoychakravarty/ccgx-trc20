@@ -1,8 +1,7 @@
-var Migrations = artifacts.require("./Migrations.sol");
-var Test = artifacts.require("./Test.sol");
-//var CCGX = artifacts.require("./ccgx.sol");
+var TimeLockedWalletFactory = artifacts.require("TimeLockedWalletFactory");
+var CCGX = artifacts.require("./CCGX.sol");
+
 module.exports = function(deployer) {
-  deployer.deploy(Migrations);
-  deployer.deploy(Test);
-  //deployer.deploy(CCGX);
+  deployer.deploy(TimeLockedWalletFactory);
+  deployer.deploy(CCGX);
 };
