@@ -11,16 +11,19 @@ contract CCGX
     string public name;                                                         // Fully qualified nane of the token
     string public symbol;                                                       // Ticker of token on Exchanges
     uint256 private totalSupply;                                                // Includes 6 decimals as 10^6 sun = 1 TRX
-    mapping (address => uint256) public balanceOf;                              // This creates an array with all balances
+    uint256 public scaledRemainder = 0;                                         // Initializes and tracks remainders from floating point division and adds them back into subsequent computation
+    uint256 public scaling = uint256(10) ** 6;                                  // Scaling factor used to multiply and divide sun values to prevent floating point division problems
+    uint256 public scaledDividendPerToken;                                      // Cumulative sun per token deposited (e.g sunDividendsCollectedForDistribution / totalSupply = 200 / 100 = 2). Amount independent of withdrawals & never decreased
+    mapping (address => uint256) public balanceOf;                              // Creates an array with all balances
+    mapping(address => uint256) public scaledDividendBalanceOf;                 // Represents sun credited/owed but not yet transferred to each account. Withdrawals reduce this amount.
+    mapping(address => uint256) public scaledDividendCreditedTo;                // Transfers / Withdrawals trigger the update fucntion which uses this per-account scaleddividendCreditedTo to first calculate what is owed and then equalize it with the global scaleddividendPerToken value to prevent infinite dividend payouts
+    mapping (address => mapping (address => Custodian)) public allowance;       // Maps max send and burn allowances for each approved custodian
 
-    // key-value pair of custodian struct
-    struct Custodian
+    struct Custodian                                                            // key-value pair of custodian struct
     {
       uint256 maxSpend;
       uint256 maxBurn;
     }
-
-    mapping (address => mapping (address => Custodian)) public allowance;       //maps max send and burn allowances for each approved custodian
 
     struct Pip                                                                  //Struct that tracks amounts controlled by beneficiary for a given benefactor address
     {
@@ -68,60 +71,51 @@ contract CCGX
 
     function transfer(address _to, uint256 _value) public returns (bool success)  //Transfers tokens of _value` amount `_to` the address of the recipient from caller's account
     {
+        require(balanceOf[msg.sender] >= value);                                // Ensures sender cannot attempt to transfer more tokens than they own
         require(_to != address(0x0));                                           // Prevents accidental transfer to 0x0 address.
         require(balanceOf[_to].add(_value) >= balanceOf[_to]);                  // Checks for integer overflows
         uint256 previousBalances = balanceOf[msg.sender].add(balanceOf[_to]);   // Saves this for the assertion in the last line of this function
+        update(msg.sender);                                                     // Contract computes amount owed and moves the amount to the “credited but not transferred” status within the msg.sender's account,
+        update(_to);                                                            // <-- added to simple CCGX TRC20 contract
         _transfer(msg.sender, _to, _value);                                     // Calls internal _transfer function to actually transfer the tokens
         assert(balanceOf[msg.sender].add(balanceOf[_to]) == previousBalances);  // Asserts that no tokens are created or destroyed in the ecosystem
         return true;
     }
 
-    function burn(uint256 _value) onlyOwner public returns (bool success)       //Destroy `_value` amount of tokens from the Tron blockchain irreversibly
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success)  //Transfers tokens on on behalf of designated `_from` address of `_value` amount `_to` a chosen recipient address
     {
-        require(balanceOf[msg.sender] >= _value);                               // Checks that the arsonist isn't burning more than they own
-        require(balanceOf[msg.sender] >= balanceOf[msg.sender].sub(_value));    // Checks for interger underflows
-        require(totalSupply >= totalSupply.sub(_value));                        // Checks for inflation bug
-        balanceOf[msg.sender] = balanceOf[msg.sender].sub(_value);              // Subtracts from the sender first
-        totalSupply = totalSupply.sub(_value);                                  // Subtracts from the totalSupply
-        emit Burn(msg.sender, _value);
-        return true;
-    }
-
-    function approveSpend(address _spender, uint256 _spend) public returns (bool success) //Sets allowance for the authorized '_spender' address to spend a maximum of `_spend` tokens on your behalf
-    {
-        require(_spender != address(0));                                        //Address approved shouldn't be 0x0
-        require(_spender != msg.sender);                                        //Do not waste gas to approve self
-        require(balanceOf[msg.sender] >= _spend);                               //Address balance must be >= _spend of custody being given to
-        allowance[msg.sender][_spender].maxSpend = _spend;                      //Precisely sets 'maxSpend' to '_spend' amount which may even lower the limit
-        Pip memory beneficiary = Pip(true, _spender, _spend, 0);                //benefactor ('missHavisham') approves a beneficiary ('Pip')
-        missHavisham[msg.sender].push(beneficiary );                            //benefactor ('missHavisham') appends to her beneficiary list
-        benefactorKeys.push(msg.sender);                                        //user calling approveSpend has address added to benefactorKeys array
-        emit SpendApproval(msg.sender, _spender, _spend);
-        return true;
+       require(_to != address(0x0));                                                                // Prevents accidental transfer to 0x0 address.
+       require(_value <= balanceOf[_from]);                                                         // Ensures account being transferred from has sufficient funds
+       require(_value <= allowance[_from][msg.sender].maxSpend);                                    // Ensures amount being transferred is in line with approved allowance
+       require(balanceOf[_to].add(_value) >= balanceOf[_to]);                                       // Checks for integer overflows
+       require(balanceOf[_from] >= balanceOf[_from].sub(_value));                                   // Checks for interger underflows
+       allowance[_from][msg.sender].maxSpend = allowance[_from][msg.sender].maxSpend.sub(_value);   // Decrements spend allowance by the amount already transferred out
+       _transfer(_from, _to, _value);                                                               // Triggers transfer
+       assert(balanceOf[_from].add(balanceOf[_to]) == previousBalances);                            // Asserts that no tokens are created or destroyed in the ecosystem
+       return true;
      }
 
-     function addressToBytes(address a) internal pure returns (bytes memory b)             //efficiently converts tron address into printable 20 byte variable
+     function approveSpend(address _spender, uint256 _spend) public returns (bool success) //Sets allowance for the authorized '_spender' address to spend a maximum of `_spend` tokens on your behalf
      {
-        assembly
-        {
-           let m := mload(0x40)
-           a := and(a, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
-           mstore(add(m, 20), xor(0x140000000000000000000000000000000000000000, a))
-           mstore(0x40, add(m, 52))
-           b := m
-         }
+         require(_spender != address(0));                                        //Address approved shouldn't be 0x0
+         require(_spender != msg.sender);                                        //Do not waste gas to approve self
+         require(balanceOf[msg.sender] >= _spend);                               //Address balance must be >= _spend of custody being given to
+         allowance[msg.sender][_spender].maxSpend = _spend;                      //Precisely sets 'maxSpend' to '_spend' amount which may even lower the limit
+         Pip memory beneficiary = Pip(true, _spender, _spend, 0);                //benefactor ('missHavisham') approves a beneficiary ('Pip')
+         missHavisham[msg.sender].push(beneficiary );                            //benefactor ('missHavisham') appends to her beneficiary list
+         benefactorKeys.push(msg.sender);                                        //user calling approveSpend has address added to benefactorKeys array
+         emit SpendApproval(msg.sender, _spender, _spend);
+         return true;
       }
 
-      function bytesToAddress(bytes memory b) internal pure returns (address)              //converts input bytes into address
+      function increaseSpendAllowance(address _spender, uint256 _addedValue) public returns (bool)            // Increments the amount of tokens alloted by owner to be spent on their behalf by addedValue.
       {
-        uint result = 0;
-        for (uint i = b.length-1; i+1 > 0; i--)
-        {
-            uint c = uint(b[i]);
-            uint to_inc = c * ( 16 ** ((b.length - i-1) * 2));
-            result += to_inc;
-        }
-        return address(result);
+          require(_spender != address(0));                                                                     //Address approved shouldn't be 0x0
+          require(_spender != msg.sender);                                                                     //Do not waste gas to approve self
+          require(balanceOf[msg.sender] >= allowance[msg.sender][_spender].maxSpend.add(_addedValue));         //address balance must be >= total _value of custody given
+          allowance[msg.sender][_spender].maxSpend = allowance[msg.sender][_spender].maxSpend.add(_addedValue);
+          emit SpendApproval(msg.sender, _spender, allowance[msg.sender][_spender].maxSpend);
+          return true;
       }
 
       function getApprovedSpenders (address _benefactor) public view returns (address)
@@ -138,74 +132,105 @@ contract CCGX
       return addrInAddr;
       }
 
-      function getTotalReqlinquished (address _benefactor) public view returns (uint256)
+      function burn(uint256 _value) onlyOwner public returns (bool success)       //Destroy `_value` amount of tokens from the Tron blockchain irreversibly
       {
-          uint i;
-          uint256 count;
-          uint256 array_len = missHavisham[_benefactor].length;
-          for(i = 0; i < array_len; i++)
-          {
-              count = count + (missHavisham[_benefactor][i].inheritedSpend);
-          }
-          return count;
-      }
-
-      function approveBurn(address _arsonist, uint256 _burn) public returns (bool success)   //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
-      {
-          require(_arsonist != address(0));                                                  //Address approved shouldn't be 0x0
-          require(_arsonist != msg.sender);                                                  //Do not waste gas to provide burn approval to self
-          require(balanceOf[msg.sender] >= _burn);                                           //address balance must be >= amount of allowable _burn
-          allowance[msg.sender][_arsonist].maxBurn = _burn;
-          emit BurnApproval(msg.sender, _arsonist, _burn);
+          require(balanceOf[msg.sender] >= _value);                               // Checks that the arsonist isn't burning more than they own
+          require(balanceOf[msg.sender] >= balanceOf[msg.sender].sub(_value));    // Checks for interger underflows
+          require(totalSupply >= totalSupply.sub(_value));                        // Checks for inflation bug
+          balanceOf[msg.sender] = balanceOf[msg.sender].sub(_value);              // Subtracts from the sender first
+          totalSupply = totalSupply.sub(_value);                                  // Subtracts from the totalSupply
+          emit Burn(msg.sender, _value);
           return true;
       }
 
-      function increaseSpendAllowance(address _spender, uint256 _addedValue) public returns (bool)            // Increments the amount of tokens alloted by owner to be spent on their behalf by addedValue.
+      function burnFrom(address _from, uint256 _value) public returns (bool success)                 //Destroy `_value` amount of tokens from the other account and the Tron blockchain irreversibly with the blessings of `_from`.
       {
-          require(_spender != address(0));                                                                     //Address approved shouldn't be 0x0
-          require(_spender != msg.sender);                                                                     //Do not waste gas to approve self
-          require(balanceOf[msg.sender] >= allowance[msg.sender][_spender].maxSpend.add(_addedValue));         //address balance must be >= total _value of custody given
-          allowance[msg.sender][_spender].maxSpend = allowance[msg.sender][_spender].maxSpend.add(_addedValue);
-          emit SpendApproval(msg.sender, _spender, allowance[msg.sender][_spender].maxSpend);
-          return true;
-      }
-
-      function increaseBurnAllowance(address _arsonist, uint256 _addedBurn) public returns (bool success)      // Increments the amount of tokens alloted by owner to be burned on their behalf by addedBurn.
-      {
-          require(_arsonist != address(0));                                                                    //Address approved shouldn't be 0x0
-          require(_arsonist != msg.sender);                                                                    //Do not waste gas to provide burn approval to self
-          require(balanceOf[msg.sender] >= allowance[msg.sender][_arsonist].maxBurn.add(_addedBurn));          //address balance must be >= total allowable burn
-          allowance[msg.sender][_arsonist].maxBurn = allowance[msg.sender][_arsonist].maxBurn.add(_addedBurn);
-          emit BurnApproval(msg.sender, _arsonist, allowance[msg.sender][_arsonist].maxBurn);
+          require(balanceOf[_from] >= _value);                                                       // Ensures amount of recipient is lesser than or equal to amount intended to be burned
+          require(_value <= allowance[_from][msg.sender].maxBurn);                                   // Ensures amount being destroyed is in line with burn allowance
+          require(balanceOf[_from] >= balanceOf[_from].sub(_value));                                 // Checks for interger underflows
+          require(totalSupply >= totalSupply.sub(_value));                                           // Checks for inflation bug
+          balanceOf[_from] = balanceOf[_from].sub(_value);                                           // Subtract from the targeted balance
+          allowance[_from][msg.sender].maxBurn = allowance[_from][msg.sender].maxBurn.sub(_value);   // Subtract from the sender's allowance
+          totalSupply = totalSupply.sub(_value);                                                     // Update totalSupply
+          emit Burn(_from, _value);
           return true;
        }
 
-       function transferFrom(address _from, address _to, uint256 _value) public returns (bool success)  //Transfers tokens on on behalf of designated `_from` address of `_value` amount `_to` a chosen recipient address
+       function approveBurn(address _arsonist, uint256 _burn) public returns (bool success)   //Sets allowance for the authorized '_arsonist' address to burn a maximum of `_burn` tokens on your behalf
        {
-          require(_to != address(0x0));                                                                // Prevents accidental transfer to 0x0 address.
-          require(_value <= balanceOf[_from]);                                                         // Ensures account being transferred from has sufficient funds
-          require(_value <= allowance[_from][msg.sender].maxSpend);                                    // Ensures amount being transferred is in line with approved allowance
-          require(balanceOf[_to].add(_value) >= balanceOf[_to]);                                       // Checks for integer overflows
-          require(balanceOf[_from] >= balanceOf[_from].sub(_value));                                   // Checks for interger underflows
-          uint256 previousBalances = balanceOf[_from].add(balanceOf[_to]);                             // Saves this for the assertion in the last line of this function
-          update(_from);                                                                               // <-- added to simple CCGX TRC20 contract
-          update(_to);                                                                                 // <-- added to simple CCGX TRC20 contract
-          allowance[_from][msg.sender].maxSpend = allowance[_from][msg.sender].maxSpend.sub(_value);   // Decrements spend allowance by the amount already transferred out
-          _transfer(_from, _to, _value);                                                               // Triggers transfer
-          assert(balanceOf[_from].add(balanceOf[_to]) == previousBalances);                            // Asserts that no tokens are created or destroyed in the ecosystem
-          return true;
+           require(_arsonist != address(0));                                                  //Address approved shouldn't be 0x0
+           require(_arsonist != msg.sender);                                                  //Do not waste gas to provide burn approval to self
+           require(balanceOf[msg.sender] >= _burn);                                           //address balance must be >= amount of allowable _burn
+           allowance[msg.sender][_arsonist].maxBurn = _burn;
+           emit BurnApproval(msg.sender, _arsonist, _burn);
+           return true;
+       }
+
+       function increaseBurnAllowance(address _arsonist, uint256 _addedBurn) public returns (bool success)      // Increments the amount of tokens alloted by owner to be burned on their behalf by addedBurn.
+       {
+           require(_arsonist != address(0));                                                                    //Address approved shouldn't be 0x0
+           require(_arsonist != msg.sender);                                                                    //Do not waste gas to provide burn approval to self
+           require(balanceOf[msg.sender] >= allowance[msg.sender][_arsonist].maxBurn.add(_addedBurn));          //address balance must be >= total allowable burn
+           allowance[msg.sender][_arsonist].maxBurn = allowance[msg.sender][_arsonist].maxBurn.add(_addedBurn);
+           emit BurnApproval(msg.sender, _arsonist, allowance[msg.sender][_arsonist].maxBurn);
+           return true;
         }
 
-        function burnFrom(address _from, uint256 _value) public returns (bool success)                 //Destroy `_value` amount of tokens from the other account and the Tron blockchain irreversibly with the blessings of `_from`.
+        function addressToBytes(address a) internal pure returns (bytes memory b)             //efficiently converts tron address into printable 20 byte variable
         {
-            require(balanceOf[_from] >= _value);                                                       // Ensures amount of recipient is lesser than or equal to amount intended to be burned 
-            require(_value <= allowance[_from][msg.sender].maxBurn);                                   // Ensures amount being destroyed is in line with burn allowance
-            require(balanceOf[_from] >= balanceOf[_from].sub(_value));                                 // Checks for interger underflows
-            require(totalSupply >= totalSupply.sub(_value));                                           // Checks for inflation bug
-            balanceOf[_from] = balanceOf[_from].sub(_value);                                           // Subtract from the targeted balance
-            allowance[_from][msg.sender].maxBurn = allowance[_from][msg.sender].maxBurn.sub(_value);   // Subtract from the sender's allowance
-            totalSupply = totalSupply.sub(_value);                                                     // Update totalSupply
-            emit Burn(_from, _value);
-            return true;
-         }
+            assembly
+            {
+                let m := mload(0x40)
+                a := and(a, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
+                mstore(add(m, 20), xor(0x140000000000000000000000000000000000000000, a))
+                mstore(0x40, add(m, 52))
+                b := m
+            }
+        }
+
+        function bytesToAddress(bytes memory b) internal pure returns (address)              //converts input bytes into address
+        {
+          uint result = 0;
+          for (uint i = b.length-1; i+1 > 0; i--)
+          {
+              uint c = uint(b[i]);
+              uint to_inc = c * ( 16 ** ((b.length - i-1) * 2));
+              result += to_inc;
+          }
+          return address(result);
+        }
+
+        function getTotalReqlinquished (address _benefactor) public view returns (uint256)
+        {
+            uint i;
+            uint256 count;
+            uint256 array_len = missHavisham[_benefactor].length;
+            for(i = 0; i < array_len; i++)
+            {
+                count = count + (missHavisham[_benefactor][i].inheritedSpend);
+            }
+            return count;
+        }
+
+        function withdraw() public
+        {
+            update(msg.sender);                                                 // responsible for making sure scaleddividendBalanceOf is up-to-date with dividends collected since last update to msg.sender’s balances
+            uint256 amount = scaledDividendBalanceOf[msg.sender] / scaling;     // safely scales divident owed
+            scaledDividendBalanceOf[msg.sender] %= scaling;                     // retains any remainder
+            msg.sender.transfer(amount);                                        // transfers remainder to recipient withdrawing dividend
+        }
+
+        function deposit() public payable
+        {
+            uint256 available = (msg.value * scaling) + scaledRemainder;        // scales the deposit and adds any previous remainder
+            scaledDividendPerToken += available / totalSupply;                  // accepts sun and updates the global scaleddividendPerToken
+            scaledRemainder = available % totalSupply;                          // computes the new remainder
+        }
+
+        function update(address account) internal
+        {
+            uint256 owed = scaledDividendPerToken - scaledDividendCreditedTo[account];  // owed amount is factor difference between global scaledDividendPerToken and the already accounted for scaledDividendCreditedTo
+            scaledDividendBalanceOf[account] += balanceOf[account] * owed;              // number of tokens owned by account is multipliedby the owed factor
+            scaledDividendCreditedTo[account] = scaledDividendPerToken;                 // scaledDividendPerToken equalized to global scaledDividendPerToken so no more dividends can be credited to account until fresh dividend funds come into the contract
+        }
 }
