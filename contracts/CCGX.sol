@@ -46,6 +46,7 @@ contract CCGX
     string tokenName = 'CryptoCannabisGame';
     string tokenSymbol = 'CCGX';
     uint8 public decimals = 6;
+    address owner;
 
     modifier onlyOwner
     {
@@ -71,7 +72,7 @@ contract CCGX
 
     function transfer(address _to, uint256 _value) public returns (bool success)  //Transfers tokens of _value` amount `_to` the address of the recipient from caller's account
     {
-        require(balanceOf[msg.sender] >= value);                                // Ensures sender cannot attempt to transfer more tokens than they own
+        require(balanceOf[msg.sender] >= _value);                               // Ensures sender cannot attempt to transfer more tokens than they own
         require(_to != address(0x0));                                           // Prevents accidental transfer to 0x0 address.
         require(balanceOf[_to].add(_value) >= balanceOf[_to]);                  // Checks for integer overflows
         uint256 previousBalances = balanceOf[msg.sender].add(balanceOf[_to]);   // Saves this for the assertion in the last line of this function
@@ -89,6 +90,7 @@ contract CCGX
        require(_value <= allowance[_from][msg.sender].maxSpend);                                    // Ensures amount being transferred is in line with approved allowance
        require(balanceOf[_to].add(_value) >= balanceOf[_to]);                                       // Checks for integer overflows
        require(balanceOf[_from] >= balanceOf[_from].sub(_value));                                   // Checks for interger underflows
+       uint256 previousBalances = balanceOf[_from].add(balanceOf[_to]);                             // Saves this for the assertion in the last line of this function
        allowance[_from][msg.sender].maxSpend = allowance[_from][msg.sender].maxSpend.sub(_value);   // Decrements spend allowance by the amount already transferred out
        _transfer(_from, _to, _value);                                                               // Triggers transfer
        assert(balanceOf[_from].add(balanceOf[_to]) == previousBalances);                            // Asserts that no tokens are created or destroyed in the ecosystem
