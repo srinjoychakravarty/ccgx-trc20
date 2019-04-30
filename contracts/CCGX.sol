@@ -70,7 +70,7 @@ contract CCGX
         emit Transfer(_from, _to, _value);                                      // Emits the Transfer event defined above
     }
 
-    function transfer(address _to, uint256 _value) public returns (bool success)  //Transfers tokens of _value` amount `_to` the address of the recipient from caller's account
+    function transfer(address _to, uint256 _value) onlyOwner public returns (bool success)  //Transfers tokens of _value` amount `_to` the address of the recipient from caller's account
     {
         require(balanceOf[msg.sender] >= _value);                               // Ensures sender cannot attempt to transfer more tokens than they own
         require(_to != address(0x0));                                           // Prevents accidental transfer to 0x0 address.
