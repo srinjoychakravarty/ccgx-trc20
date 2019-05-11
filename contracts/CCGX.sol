@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity ^0.4.23;
 
 //Maths operations with safety checks that throw on error
 library SafeMaths {
