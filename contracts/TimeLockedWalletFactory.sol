@@ -1,10 +1,10 @@
-pragma solidity ^0.4.23;
+pragma solidity >=0.4.21 <0.6.0;
 
 import "./TimeLockedWallet.sol";
 
 contract TimeLockedWalletFactory {
     using SafeMaths for uint256;
-    
+
     uint256 public _unlockDate = now.add(259200);   //sets unlock date in unix epoch to 3 days or 259200 seconds in the future
     mapping(address => address[]) wallets;
 

@@ -1,4 +1,4 @@
-pragma solidity 0.5.9;
+pragma solidity >=0.4.21 <0.6.0;
 
 interface TokenRecipient {
   function receiveApproval(address _from, uint256 _value, address _token) external;
