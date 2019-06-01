@@ -119,7 +119,7 @@ contract TokenTRC20 {
     function approveAndCall(address _spender, uint256 _value)
         public
         returns (bool success) {
-        tokenRecipient spender = tokenRecipient(_spender);
+        TokenRecipient spender = TokenRecipient(_spender);
         if (approve(_spender, _value)) {
             spender.receiveApproval(msg.sender, _value, address(this));
             return true;
